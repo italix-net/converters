@@ -1,0 +1,35 @@
+{
+    "name": "italix/converters",
+    "description": "A pairwise format-conversion contract and a shortest-route driver registry — the plumbing italix/documents and a future italix/media share, neither owns.",
+    "type": "library",
+    "license": "MPL-2.0",
+    "version": "0.3.0",
+    "keywords": [
+        "conversion",
+        "pipeline",
+        "routing",
+        "pandoc",
+        "ffmpeg",
+        "options"
+    ],
+    "homepage": "https://github.com/italix-net/converters",
+    "authors": [
+        {
+            "name": "Italix",
+            "email": "info@italix.net"
+        }
+    ],
+    "require": {
+        "php": ">=8.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Italix\\Converters\\": ""
+        }
+    },
+    "scripts": {
+        "test": "php tests/ConverterSetTest.php"
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
