@@ -120,6 +120,93 @@ final class OptionsAwareFakeConverter implements Converter
     }
 }
 
+/**
+ * Same shape as FakeConverter, but as two distinctly-*named* classes rather
+ * than two instances of one class — `via`'s driver-preference matching
+ * works by class name, and two instances of FakeConverter share a class, so
+ * they cannot be told apart by a `via` entry the way two real drivers
+ * (GdImageConverter vs. a hypothetical AiUpscaleConverter) always can be.
+ */
+final class NamedConverterAlpha implements Converter
+{
+    /** @param array<array{0: string, 1: string}> $pairs */
+    public function __construct(private readonly array $pairs, private readonly string $marker_c)
+    {
+    }
+
+    public function pairs(): array
+    {
+        return $this->pairs;
+    }
+
+    public function is_available(): bool
+    {
+        return true;
+    }
+
+    public function convert(string $source, string $from_extension_c, string $to_extension_c, ConversionOptions $options): ConvertedDocument
+    {
+        return new ConvertedDocument($source . "+{$this->marker_c}", $to_extension_c, '');
+    }
+
+    public function describe(): string
+    {
+        return "fake:{$this->marker_c}";
+    }
+}
+
+final class NamedConverterBeta implements Converter
+{
+    /** @param array<array{0: string, 1: string}> $pairs */
+    public function __construct(private readonly array $pairs, private readonly string $marker_c)
+    {
+    }
+
+    public function pairs(): array
+    {
+        return $this->pairs;
+    }
+
+    public function is_available(): bool
+    {
+        return true;
+    }
+
+    public function convert(string $source, string $from_extension_c, string $to_extension_c, ConversionOptions $options): ConvertedDocument
+    {
+        return new ConvertedDocument($source . "+{$this->marker_c}", $to_extension_c, '');
+    }
+
+    public function describe(): string
+    {
+        return "fake:{$this->marker_c}";
+    }
+}
+
+/** Reads QUALITY, same key OptionsAwareFakeConverter reads — but a different driver, so the two can collide on purpose. */
+final class SecondOptionsAwareFakeConverter implements Converter
+{
+    public function pairs(): array
+    {
+        return [['raw', 'out']];
+    }
+
+    public function is_available(): bool
+    {
+        return true;
+    }
+
+    public function convert(string $source, string $from_extension_c, string $to_extension_c, ConversionOptions $options): ConvertedDocument
+    {
+        return new ConvertedDocument($source . "+second-q{$options->quality_n(90, static::class)}", $to_extension_c, '');
+    }
+
+    public function describe(): string
+    {
+        return 'fake:second-options-aware';
+    }
+}
+
 $failures = 0;
 $checks_n = 0;
 
@@ -338,6 +425,91 @@ check(
     'both hops read the same PAGE value from one shared ConversionOptions',
     $multi_hop_options->convert('S', 'raw', 'final', ConversionOptions::none()->with_page(9))->bytes(),
     'S+q90+p9+second-hop-saw-page9'
+);
+
+// -----------------------------------------------------------------------------
+// via: a format waypoint forces a route even when a shorter one bypasses it
+
+$forced = $shortest->route('a', 'd', via: ['b']);
+check('via forces the route through b, even though a shorter route bypasses it', count($forced), 3);
+check('...b is genuinely the first hop\'s destination', $forced[0][1], 'b');
+check('...the route still reaches d in the end', $forced[2][1], 'd');
+
+check(
+    'convert() honors via the same way route() does',
+    $shortest->convert('S', 'a', 'd', via: ['b'])->bytes(),
+    'S+a2b+b2e+e2d'
+);
+
+// -----------------------------------------------------------------------------
+// via: a driver preference forces a specific driver on a hop two drivers compete for
+
+$alpha     = new NamedConverterAlpha([['png', 'webp']], 'alpha');
+$beta      = new NamedConverterBeta([['png', 'webp']], 'beta');
+$competing = new ConverterSet([$alpha, $beta]);
+
+check('unconstrained, the first-registered driver wins — unchanged default behavior', $competing->convert('S', 'png', 'webp')->bytes(), 'S+alpha');
+check('via names the second driver by class, and it wins instead', $competing->convert('S', 'png', 'webp', via: [NamedConverterBeta::class])->bytes(), 'S+beta');
+
+$preferred_route = $competing->route('png', 'webp', via: [NamedConverterBeta::class]);
+check('route() itself reflects the preferred driver, not just convert()', $preferred_route[0][2], $beta);
+
+check(
+    'a via entry matching neither a known format nor any registered driver has no effect',
+    $competing->convert('S', 'png', 'webp', via: ['NoSuchDriverAnywhere'])->bytes(),
+    'S+alpha'
+);
+
+// -----------------------------------------------------------------------------
+// via: a format waypoint and a driver preference combined
+
+$second_e_to_d = new NamedConverterBeta([['e', 'd']], 'e2d-ALT');
+$mixed      = new ConverterSet([$a_to_c, $c_to_d, $a_to_b, $b_to_e, $e_to_d, $second_e_to_d]);
+
+$mixed_route = $mixed->route('a', 'd', via: ['b', NamedConverterBeta::class]);
+check('the waypoint still forces the long route', count($mixed_route), 3);
+check('...and the driver preference wins the e->d hop specifically, not the first-registered one', $mixed_route[2][2], $second_e_to_d);
+
+// -----------------------------------------------------------------------------
+// all_routes(): every route tied for shortest, in every driver combination
+
+$all_competing = $competing->all_routes('png', 'webp');
+check('two drivers tied on one hop produce two full route alternatives', count($all_competing), 2);
+check('...the default (first-registered) combination is included', $all_competing[0][0][2], $alpha);
+check('...and the alternate', $all_competing[1][0][2], $beta);
+
+$ties_only = $shortest->all_routes('a', 'd');
+check('no slack: only the tied-shortest route is returned', count($ties_only), 1);
+check('...it is the 2-hop route through c', count($ties_only[0]), 2);
+
+$with_slack = $shortest->all_routes('a', 'd', slack_n: 1);
+check('slack=1 also includes the 3-hop detour through b and e', count($with_slack), 2);
+
+// -----------------------------------------------------------------------------
+// driver-scoped ConversionOptions: two drivers reading the same key differently, disambiguated by identity
+
+$scoped_set = new ConverterSet([new OptionsAwareFakeConverter()]);
+
+$unscoped_options = ConversionOptions::none()->with_quality(77);
+check(
+    'an unscoped QUALITY reaches the driver exactly as before — no behavior change for anyone not using scoping',
+    $scoped_set->convert('S', 'raw', 'out', $unscoped_options)->bytes(),
+    'S+q77+p1'
+);
+
+$scoped_for_someone_else = ConversionOptions::none()
+    ->with_quality(90)
+    ->with_quality(4, SecondOptionsAwareFakeConverter::class);
+check(
+    'a value scoped to a DIFFERENT driver is invisible to this one — it still sees the unscoped default',
+    $scoped_set->convert('S', 'raw', 'out', $scoped_for_someone_else)->bytes(),
+    'S+q90+p1'
+);
+
+check(
+    'the scoped value reaches ONLY the driver it was scoped to, when that driver is the one asked',
+    (new SecondOptionsAwareFakeConverter())->convert('S', 'raw', 'out', $scoped_for_someone_else)->bytes(),
+    'S+second-q4'
 );
 
 printf("\n%d checks, %d failures\n", $checks_n, $failures);

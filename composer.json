@@ -3,7 +3,7 @@
     "description": "A pairwise format-conversion contract and a shortest-route driver registry — the plumbing italix/documents and a future italix/media share, neither owns.",
     "type": "library",
     "license": "MPL-2.0",
-    "version": "0.3.0",
+    "version": "0.5.0",
     "keywords": [
         "conversion",
         "pipeline",
@@ -28,7 +28,11 @@
         }
     },
     "scripts": {
-        "test": "php tests/ConverterSetTest.php"
+        "test": [
+            "php tests/ConverterSetTest.php",
+            "php tests/PipelineTest.php",
+            "php tests/CropGeometryTest.php"
+        ]
     },
     "minimum-stability": "dev",
     "prefer-stable": true
