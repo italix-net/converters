@@ -17,13 +17,31 @@
 
 declare(strict_types=1);
 
-require __DIR__ . '/../Converter.php';
-require __DIR__ . '/../ConvertedDocument.php';
-require __DIR__ . '/../ConversionException.php';
-require __DIR__ . '/../ConversionOptions.php';
-require __DIR__ . '/../UnsupportedOptionException.php';
-require __DIR__ . '/../NoRouteException.php';
-require __DIR__ . '/../ConverterSet.php';
+(static function (): void {
+    foreach ([
+        __DIR__ . '/../../../../../vendor/autoload.php',
+        __DIR__ . '/../../../../vendor/autoload.php',
+        __DIR__ . '/../../../autoload.php',
+        __DIR__ . '/../vendor/autoload.php',
+    ] as $autoload) {
+        if (is_file($autoload)) {
+            require_once $autoload;
+
+            return;
+        }
+    }
+
+    fwrite(STDERR, "Could not find an autoloader. Run composer install.\n");
+    exit(2);
+})();
+
+require_once __DIR__ . '/../Converter.php';
+require_once __DIR__ . '/../ConvertedDocument.php';
+require_once __DIR__ . '/../ConversionException.php';
+require_once __DIR__ . '/../ConversionOptions.php';
+require_once __DIR__ . '/../UnsupportedOptionException.php';
+require_once __DIR__ . '/../NoRouteException.php';
+require_once __DIR__ . '/../ConverterSet.php';
 
 use Italix\Converters\ConversionException;
 use Italix\Converters\ConversionOptions;
@@ -32,6 +50,10 @@ use Italix\Converters\ConvertedDocument;
 use Italix\Converters\ConverterSet;
 use Italix\Converters\NoRouteException;
 use Italix\Converters\UnsupportedOptionException;
+
+use function Italix\Testing\{suite, test, summary};
+
+suite('Italix Converters — ConverterSet');
 
 /**
  * Converts by appending a marker to the bytes, so a test can read the
@@ -207,19 +229,13 @@ final class SecondOptionsAwareFakeConverter implements Converter
     }
 }
 
-$failures = 0;
-$checks_n = 0;
-
 function check(string $label, mixed $actual, mixed $expected): void
 {
-    global $failures, $checks_n;
-    $checks_n++;
     if ($actual !== $expected) {
-        $failures++;
-        printf("FAIL %s: expected %s, got %s\n", $label, var_export($expected, true), var_export($actual, true));
+        test($label, false, sprintf('expected %s, got %s', var_export($expected, true), var_export($actual, true)));
         return;
     }
-    printf("ok   %s\n", $label);
+    test($label, true);
 }
 
 function check_true(string $label, bool $actual): void
@@ -512,5 +528,4 @@ check(
     'S+second-q4'
 );
 
-printf("\n%d checks, %d failures\n", $checks_n, $failures);
-exit($failures === 0 ? 0 : 1);
+exit(summary());

@@ -144,6 +144,30 @@ Three things worth knowing about how routing decides:
 - **`from === to` is free.** Asking to convert a format into itself returns the source untouched,
   no driver invoked.
 
+## Grids, slices and gaps
+
+A composite — a sprite sheet, a contact sheet, a strip of screenshots, a page of panels — is, on
+each axis, a margin, then tracks separated by gutters: `margin + track + gutter + … + margin =
+size`. Three stateless classes hold that geometry, with no pixels in them, so every driver that
+takes a composite apart (an `Extractor`) or puts one together (a `Merger`) shares it — an image
+driver today, a video mosaic or an audio timeline later:
+
+- **`AxisLayout`** — the tracks of one axis. `resolve()` goes from a size to the tracks, `fit()`
+  from what goes in each track to the size. A spec is a count (`3`), or a list of pixels and shares
+  (`'200px 1fr 2fr'`); pixels must carry their unit, so `'100'` is always a count. Leftover pixels
+  (1024 in three) go one each to the first shares: 342, 341, 341, in both directions.
+- **`GridGeometry`** — two axes and a reading order (`GRID_ORDER`: `lr-tb`, `rl-tb`, `tb-lr`,
+  `tb-rl`). `cells()` takes a sheet apart, `canvas()` puts one together, `sort()` orders any set of
+  labelled cells — a detected, irregular one too.
+- **`Spans`** — where the content is along one axis, from a profile (how much content each step
+  holds): `content()` for the outer margin, `split()` for the gutters between. A margin around a
+  scan, the silence between takes and the black frames between scenes are the same problem.
+
+The keys (`GRID_COLUMNS`, `GRID_ROWS`, `GRID_GUTTER_X/Y`, `GRID_MARGIN_*`, `GRID_ORDER`,
+`GRID_EXPECT`, `GRID_SKIP_EMPTY`, `BACKGROUND`, `GAP_MIN`, `GAP_TOLERANCE`) describe the sheet, not
+the operation: the options that took a sheet apart put it back together. A piece an `Extractor`
+returns carries where it came from — `ConvertedDocument::locator()`, in the driver's own shape.
+
 ## Cooperating with other libraries
 
 Neither `italix/documents` nor a future `italix/media` needs to know the other exists. Each builds
@@ -153,6 +177,150 @@ and video formats. Cross-domain conversions (a Markdown file rendered to speech,
 PDF exported as an image) only require whoever is wiring the application together to register both
 libraries' driver sets into *one* shared `ConverterSet` — routing across the boundary then falls out
 of the same shortest-path search, with neither library ever importing the other.
+
+## Cookbook
+
+With real drivers — `italix/media`'s and `italix/documents'`, which this library does not know. So
+these examples run, as written, in `italix/media`'s `tests/ConvertersCookbookTest.php`, and what each
+comment says came back is asserted there.
+
+### Which tool
+
+| you want | use |
+|---|---|
+| one conversion, one driver — a resize, a format change, both | the driver itself: `$driver->convert()` |
+| from format A to format Z, whatever it takes | `ConverterSet` — it finds the route |
+| exactly these steps, in this order, each with its own options — the same format twice included | `Pipeline` |
+
+`ConverterSet` and `Pipeline` take the same drivers (any `Converter`) and the same `ConversionOptions`;
+what differs is that a `ConverterSet` hands **one** options bag to every hop of the route it found,
+while each `Pipeline` step carries its own. `Extractor`, `Merger` and `Trimmer` belong to neither:
+they change how many documents there are, not what one is.
+
+### One driver, directly
+
+```php
+use Italix\Converters\ConversionOptions;
+use Italix\Media\GdImageConverter;
+
+$gd = new GdImageConverter();
+
+$smaller = $gd->convert($png, 'png', 'png', ConversionOptions::none()->with_width(800));
+// 1600x900 -> 800x450
+
+$as_webp = $gd->convert($png, 'png', 'webp', ConversionOptions::none()->with_width(800)->with_quality(80));
+// a resize and a format change, still one call: an 800x450 WebP
+```
+
+### A `ConverterSet`: the route is found
+
+```php
+use Italix\Converters\ConverterSet;
+use Italix\Documents\HtmlToPdfConverter;
+use Italix\Documents\MarkdownToHtmlConverter;
+use Italix\Media\PdfPageToImageConverter;
+
+$set = new ConverterSet([
+    new MarkdownToHtmlConverter(),                 // italix/documents
+    new HtmlToPdfConverter(),                      // italix/documents
+    new PdfPageToImageConverter(),                 // italix/media
+    new GdImageConverter(),                        // italix/media
+]);
+
+$preview = $set->convert($markdown, 'md', 'jpg', ConversionOptions::none()->with_width(400));
+// image/jpeg, 400x565 — four drivers, two libraries that never import each other
+
+$set->route('md', 'jpg');
+// md->html (MarkdownToHtmlConverter), html->pdf (HtmlToPdfConverter),
+// pdf->png (PdfPageToImageConverter), png->jpg (GdImageConverter)
+```
+
+### Waypoints: a format the route must pass through
+
+```php
+$set->route('png', 'jpg');             // png->jpg, direct
+$set->route('png', 'jpg', ['gif']);    // png->gif->jpg: the waypoint is forced in
+$set->route('md', 'jpg', ['webp']);    // ... pdf->png, png->webp, webp->jpg
+
+$set->convert($markdown, 'md', 'jpg', ConversionOptions::none()->with_width(400), ['webp']);
+// the same 400x565 JPEG, along that route
+
+$set->all_routes('png', 'jpg', [], 1);
+// every route up to one hop longer than the shortest: direct, via jpeg, via gif, via webp
+```
+
+### Driver preference: which driver, when several can
+
+```php
+$set->route('md', 'jpg', [GdImageConverter::class]);
+```
+
+A class name in `via` picks among drivers that can all do the same hop — two `pdf -> png` drivers,
+say — and never adds a hop of its own. With a single candidate for every hop, as here, the route is
+the one without it.
+
+### One options bag through every hop — scoped when it must reach one driver only
+
+```php
+$set->convert($markdown, 'md', 'jpg', ConversionOptions::none()
+    ->with_width(300, GdImageConverter::class)
+    ->with_quality(70, GdImageConverter::class));
+// a 300px-wide JPEG; no other driver on the route sees either value
+```
+
+An unscoped value reaches every hop that reads that key — a route through `GdImageConverter` twice
+(`via ['webp']`) resizes twice. When each step needs its own values, that is a `Pipeline`.
+
+### A `Pipeline`: exactly these steps
+
+```php
+use Italix\Converters\Pipeline;
+
+// The same format twice — which no route can do — each step with its own options.
+$pipeline = new Pipeline([
+    ['driver' => $gd, 'options' => ConversionOptions::none()->with_width(800)],
+    ['driver' => $gd, 'to' => 'webp', 'options' => ConversionOptions::none()->with_quality(70)],
+    ['driver' => $gd, 'to' => 'png', 'options' => ConversionOptions::none()->with_height(200)],
+]);
+$pipeline->run($png, 'png');
+// png -(WIDTH 800)-> png -(QUALITY 70)-> webp -(HEIGHT 200)-> png: a 356x200 PNG
+
+// Across libraries: page 2 of a PDF, as a 600px-wide WebP.
+(new Pipeline([
+    ['driver' => new PdfPageToImageConverter(), 'to' => 'png', 'options' => ConversionOptions::none()->with_page(2)],
+    ['driver' => $gd, 'to' => 'webp', 'options' => ConversionOptions::none()->with_width(600)],
+]))->run($pdf, 'pdf');
+```
+
+### Geometry without pixels
+
+```php
+use Italix\Converters\AxisLayout;
+use Italix\Converters\GridGeometry;
+use Italix\Converters\Spans;
+
+AxisLayout::resolve(1024, 3, 0, 0, 0);
+// [[0, 342], [342, 341], [683, 341]] — [offset, size] of each track
+
+GridGeometry::cells(300, 200, ConversionOptions::none()->with_grid_columns(3)->with_grid_rows(2))[4];
+// ['row' => 2, 'column' => 2, 'x' => 100, 'y' => 100, 'width' => 100, 'height' => 100]
+
+GridGeometry::canvas([[100, 80], [120, 60], [100, 80]], ConversionOptions::none()->with_grid_columns(2));
+// a 220x160 sheet, and the cell each piece goes into
+
+Spans::split([0.0, 0.0, 0.4, 0.9, 0.0, 0.0, 0.0, 0.7, 0.8, 0.0], 2);
+// [[2, 3], [7, 8]] — the runs of content, split where at least 2 empty steps lie between
+```
+
+### When it cannot work, it says so
+
+```php
+(new ConverterSet([new GdImageConverter()]))->convert($png, 'png', 'docx');
+// NoRouteException: No route from .png to .docx. Reachable from .png: .jpg, .jpeg, .gif, .webp.
+
+(new Pipeline([['to' => 'webp']]))->run($png, 'png');
+// ConversionException: Pipeline step 0 needs a 'driver' key holding a Converter instance.
+```
 
 ## Verification
 

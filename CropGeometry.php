@@ -79,13 +79,13 @@ final class CropGeometry
         $crop_right_n  = self::to_pixels($options->crop_right($reader_c), $source_width_n);
         $crop_top_n    = self::to_pixels($options->crop_top($reader_c), $source_height_n);
         $crop_bottom_n = self::to_pixels($options->crop_bottom($reader_c), $source_height_n);
-        $align_x_n     = $options->align_x_n(50, $reader_c);
-        $align_y_n     = $options->align_y_n(50, $reader_c);
+        $align_x_perc  = $options->align_x_perc(50, $reader_c);
+        $align_y_perc  = $options->align_y_perc(50, $reader_c);
         $ratio_c       = $options->ratio_code($reader_c);
 
         if ($ratio_c === null) {
-            [$x, $target_width_n]  = self::resolve_axis($source_width_n, $width_n, $crop_left_n, $crop_right_n, $align_x_n);
-            [$y, $target_height_n] = self::resolve_axis($source_height_n, $height_n, $crop_top_n, $crop_bottom_n, $align_y_n);
+            [$x, $target_width_n]  = self::resolve_axis($source_width_n, $width_n, $crop_left_n, $crop_right_n, $align_x_perc);
+            [$y, $target_height_n] = self::resolve_axis($source_height_n, $height_n, $crop_top_n, $crop_bottom_n, $align_y_perc);
 
             return ['x' => $x, 'y' => $y, 'width' => $target_width_n, 'height' => $target_height_n];
         }
@@ -96,26 +96,26 @@ final class CropGeometry
         $has_y_info = $height_n !== null || $crop_top_n !== null || $crop_bottom_n !== null;
 
         if ($has_x_info && !$has_y_info) {
-            [$x, $target_width_n]  = self::resolve_axis($source_width_n, $width_n, $crop_left_n, $crop_right_n, $align_x_n);
+            [$x, $target_width_n]  = self::resolve_axis($source_width_n, $width_n, $crop_left_n, $crop_right_n, $align_x_perc);
             [$y, $target_height_n] = self::resolve_axis(
                 $source_height_n,
                 (int) round($target_width_n * $ratio_height_n / $ratio_width_n),
                 null,
                 null,
-                $align_y_n
+                $align_y_perc
             );
 
             return ['x' => $x, 'y' => $y, 'width' => $target_width_n, 'height' => $target_height_n];
         }
 
         if ($has_y_info && !$has_x_info) {
-            [$y, $target_height_n] = self::resolve_axis($source_height_n, $height_n, $crop_top_n, $crop_bottom_n, $align_y_n);
+            [$y, $target_height_n] = self::resolve_axis($source_height_n, $height_n, $crop_top_n, $crop_bottom_n, $align_y_perc);
             [$x, $target_width_n]  = self::resolve_axis(
                 $source_width_n,
                 (int) round($target_height_n * $ratio_width_n / $ratio_height_n),
                 null,
                 null,
-                $align_x_n
+                $align_x_perc
             );
 
             return ['x' => $x, 'y' => $y, 'width' => $target_width_n, 'height' => $target_height_n];
@@ -128,13 +128,13 @@ final class CropGeometry
             if ($source_ratio_n > $target_ratio_n) {
                 // Source is relatively wider than the target — height stays
                 // full, width is the one that shrinks.
-                [$y, $target_height_n] = self::resolve_axis($source_height_n, $source_height_n, null, null, $align_y_n);
+                [$y, $target_height_n] = self::resolve_axis($source_height_n, $source_height_n, null, null, $align_y_perc);
                 [$x, $target_width_n]  = self::resolve_axis(
                     $source_width_n,
                     (int) round($target_height_n * $ratio_width_n / $ratio_height_n),
                     null,
                     null,
-                    $align_x_n
+                    $align_x_perc
                 );
             } else {
                 // Source is relatively taller/narrower than the target —
@@ -142,13 +142,13 @@ final class CropGeometry
                 // than the source falls here too: there is no content to
                 // add, so the width cannot grow to match — only the height
                 // can shrink to make the kept region relatively wider.
-                [$x, $target_width_n]  = self::resolve_axis($source_width_n, $source_width_n, null, null, $align_x_n);
+                [$x, $target_width_n]  = self::resolve_axis($source_width_n, $source_width_n, null, null, $align_x_perc);
                 [$y, $target_height_n] = self::resolve_axis(
                     $source_height_n,
                     (int) round($target_width_n * $ratio_height_n / $ratio_width_n),
                     null,
                     null,
-                    $align_y_n
+                    $align_y_perc
                 );
             }
 
@@ -157,8 +157,8 @@ final class CropGeometry
 
         // Both axes already fully specified — RATIO is a consistency check,
         // not a silent override of whichever axis this class prefers.
-        [$x, $target_width_n]  = self::resolve_axis($source_width_n, $width_n, $crop_left_n, $crop_right_n, $align_x_n);
-        [$y, $target_height_n] = self::resolve_axis($source_height_n, $height_n, $crop_top_n, $crop_bottom_n, $align_y_n);
+        [$x, $target_width_n]  = self::resolve_axis($source_width_n, $width_n, $crop_left_n, $crop_right_n, $align_x_perc);
+        [$y, $target_height_n] = self::resolve_axis($source_height_n, $height_n, $crop_top_n, $crop_bottom_n, $align_y_perc);
 
         $expected_height_n = $target_width_n * $ratio_height_n / $ratio_width_n;
 
@@ -182,7 +182,7 @@ final class CropGeometry
         ?int $target_size_n,
         ?int $crop_start_n,
         ?int $crop_end_n,
-        int $align_percent_n
+        int $align_perc
     ): array {
         $given_n = (int) ($target_size_n !== null) + (int) ($crop_start_n !== null) + (int) ($crop_end_n !== null);
 
@@ -207,7 +207,7 @@ final class CropGeometry
             }
         } elseif ($given_n === 1 && $target_size_n !== null) {
             $total_cut_n  = $source_size_n - $target_size_n;
-            $crop_start_n = (int) round($total_cut_n * $align_percent_n / 100);
+            $crop_start_n = (int) round($total_cut_n * $align_perc / 100);
             $crop_end_n   = $total_cut_n - $crop_start_n;
         } else {
             // 0 given, or only one of crop_start/crop_end given — the

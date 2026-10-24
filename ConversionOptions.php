@@ -93,6 +93,30 @@ final class ConversionOptions
     public const CROP_TOP    = 'crop_top';     // int or '%', of source height
     public const CROP_BOTTOM = 'crop_bottom';  // int or '%', of source height
 
+    // Grid layout — read by Italix\Converters\GridGeometry (and AxisLayout
+    // under it), shared by an Extractor that takes a sheet apart and a
+    // Merger that puts one together: the keys describe the sheet, not the
+    // operation, so the same options do both. On each axis:
+    // margin_start + track + gutter + track + ... + margin_end = size.
+    public const GRID_COLUMNS       = 'grid_columns';        // int (that many equal tracks), a track list like '200px 1fr 2fr' (pixels and shares), or 'auto' (detect)
+    public const GRID_ROWS          = 'grid_rows';           // same, on the Y axis
+    public const GRID_GUTTER_X      = 'grid_gutter_x';       // int (pixels) or '%' of the sheet's width — between columns
+    public const GRID_GUTTER_Y      = 'grid_gutter_y';       // int or '%', of the sheet's height — between rows
+    public const GRID_MARGIN_LEFT   = 'grid_margin_left';    // int or '%', of the sheet's width — the frame around the grid
+    public const GRID_MARGIN_RIGHT  = 'grid_margin_right';   // int or '%', of the sheet's width
+    public const GRID_MARGIN_TOP    = 'grid_margin_top';     // int or '%', of the sheet's height
+    public const GRID_MARGIN_BOTTOM = 'grid_margin_bottom';  // int or '%', of the sheet's height
+    public const GRID_ORDER         = 'grid_order';          // 'lr-tb' (default), 'rl-tb', 'tb-lr', 'tb-rl' — the reading order of the pieces
+    public const GRID_EXPECT        = 'grid_expect';         // int — how many pieces there must be; any other count is an error, not a wrong cut
+    public const GRID_SKIP_EMPTY    = 'grid_skip_empty';     // bool — a cell that is all background is not returned
+
+    // Background and gap detection — what fills a gutter or a margin when
+    // merging, and what counts as "nothing" when detecting one: shared by a
+    // grid Extractor and an adaptive Trimmer (Italix\Converters\Spans).
+    public const BACKGROUND    = 'background';     // string '#rrggbb', '#rrggbbaa' or 'transparent'; absent = detected (the commonest colour along the border)
+    public const GAP_MIN       = 'gap_min';        // int (pixels) or '%' of the axis — the thinnest run of background that counts as a gutter
+    public const GAP_TOLERANCE = 'gap_tolerance';  // int 0-100 — how far from the background a pixel may be and still count as background
+
     /** @var array<string, mixed> */
     private array $values;
 
@@ -147,9 +171,9 @@ final class ConversionOptions
         return new self($this->values, $scoped);
     }
 
-    public function with_quality(int $quality_n, ?string $driver_c = null): self
+    public function with_quality(int $quality, ?string $driver_c = null): self
     {
-        return $this->with(self::QUALITY, $quality_n, $driver_c);
+        return $this->with(self::QUALITY, $quality, $driver_c);
     }
 
     public function with_lossless(bool $flag, ?string $driver_c = null): self
@@ -157,9 +181,9 @@ final class ConversionOptions
         return $this->with(self::LOSSLESS, $flag, $driver_c);
     }
 
-    public function with_page(int $page_n, ?string $driver_c = null): self
+    public function with_page(int $page_i, ?string $driver_c = null): self
     {
-        return $this->with(self::PAGE, $page_n, $driver_c);
+        return $this->with(self::PAGE, $page_i, $driver_c);
     }
 
     public function with_width(int $width_n, ?string $driver_c = null): self
@@ -187,14 +211,14 @@ final class ConversionOptions
         return $this->with(self::RATIO, $ratio_c, $driver_c);
     }
 
-    public function with_align_x(int $percent_n, ?string $driver_c = null): self
+    public function with_align_x(int $align_perc, ?string $driver_c = null): self
     {
-        return $this->with(self::ALIGN_X, $percent_n, $driver_c);
+        return $this->with(self::ALIGN_X, $align_perc, $driver_c);
     }
 
-    public function with_align_y(int $percent_n, ?string $driver_c = null): self
+    public function with_align_y(int $align_perc, ?string $driver_c = null): self
     {
-        return $this->with(self::ALIGN_Y, $percent_n, $driver_c);
+        return $this->with(self::ALIGN_Y, $align_perc, $driver_c);
     }
 
     public function with_crop_left(int|string $amount, ?string $driver_c = null): self
@@ -215,6 +239,76 @@ final class ConversionOptions
     public function with_crop_bottom(int|string $amount, ?string $driver_c = null): self
     {
         return $this->with(self::CROP_BOTTOM, $amount, $driver_c);
+    }
+
+    public function with_grid_columns(int|string $tracks, ?string $driver_c = null): self
+    {
+        return $this->with(self::GRID_COLUMNS, $tracks, $driver_c);
+    }
+
+    public function with_grid_rows(int|string $tracks, ?string $driver_c = null): self
+    {
+        return $this->with(self::GRID_ROWS, $tracks, $driver_c);
+    }
+
+    public function with_grid_gutter_x(int|string $amount, ?string $driver_c = null): self
+    {
+        return $this->with(self::GRID_GUTTER_X, $amount, $driver_c);
+    }
+
+    public function with_grid_gutter_y(int|string $amount, ?string $driver_c = null): self
+    {
+        return $this->with(self::GRID_GUTTER_Y, $amount, $driver_c);
+    }
+
+    public function with_grid_margin_left(int|string $amount, ?string $driver_c = null): self
+    {
+        return $this->with(self::GRID_MARGIN_LEFT, $amount, $driver_c);
+    }
+
+    public function with_grid_margin_right(int|string $amount, ?string $driver_c = null): self
+    {
+        return $this->with(self::GRID_MARGIN_RIGHT, $amount, $driver_c);
+    }
+
+    public function with_grid_margin_top(int|string $amount, ?string $driver_c = null): self
+    {
+        return $this->with(self::GRID_MARGIN_TOP, $amount, $driver_c);
+    }
+
+    public function with_grid_margin_bottom(int|string $amount, ?string $driver_c = null): self
+    {
+        return $this->with(self::GRID_MARGIN_BOTTOM, $amount, $driver_c);
+    }
+
+    public function with_grid_order(string $order_c, ?string $driver_c = null): self
+    {
+        return $this->with(self::GRID_ORDER, $order_c, $driver_c);
+    }
+
+    public function with_grid_expect(int $pieces_n, ?string $driver_c = null): self
+    {
+        return $this->with(self::GRID_EXPECT, $pieces_n, $driver_c);
+    }
+
+    public function with_grid_skip_empty(bool $flag, ?string $driver_c = null): self
+    {
+        return $this->with(self::GRID_SKIP_EMPTY, $flag, $driver_c);
+    }
+
+    public function with_background(string $color_c, ?string $driver_c = null): self
+    {
+        return $this->with(self::BACKGROUND, $color_c, $driver_c);
+    }
+
+    public function with_gap_min(int|string $amount, ?string $driver_c = null): self
+    {
+        return $this->with(self::GAP_MIN, $amount, $driver_c);
+    }
+
+    public function with_gap_tolerance(int $tolerance_perc, ?string $driver_c = null): self
+    {
+        return $this->with(self::GAP_TOLERANCE, $tolerance_perc, $driver_c);
     }
 
     /** True if get() (naming the same $reader_c, when given) would return something other than a caller-supplied default. */
@@ -243,9 +337,15 @@ final class ConversionOptions
         return $this->values[$key] ?? $default;
     }
 
-    public function quality_n(?int $default = null, ?string $reader_c = null): ?int
+    public function quality(?int $default = null, ?string $reader_c = null): ?int
     {
         return $this->get(self::QUALITY, $default, $reader_c);
+    }
+
+    /** @deprecated since 0.7.0 — quality() says the same: a level is not a count (`_n` is kept for counts). Removed in 0.8.0. */
+    public function quality_n(?int $default = null, ?string $reader_c = null): ?int
+    {
+        return $this->quality($default, $reader_c);
     }
 
     public function lossless(bool $default = false, ?string $reader_c = null): bool
@@ -253,9 +353,16 @@ final class ConversionOptions
         return $this->get(self::LOSSLESS, $default, $reader_c);
     }
 
-    public function page_n(int $default = 1, ?string $reader_c = null): int
+    /** The page, 1-based — an index, hence `_i`. */
+    public function page_i(int $default = 1, ?string $reader_c = null): int
     {
         return $this->get(self::PAGE, $default, $reader_c);
+    }
+
+    /** @deprecated since 0.7.0 — page_i() says the same: a page number is an index, not a count. Removed in 0.8.0. */
+    public function page_n(int $default = 1, ?string $reader_c = null): int
+    {
+        return $this->page_i($default, $reader_c);
     }
 
     public function width_n(?string $reader_c = null): ?int
@@ -283,14 +390,26 @@ final class ConversionOptions
         return $this->get(self::RATIO, null, $reader_c);
     }
 
-    public function align_x_n(int $default = 50, ?string $reader_c = null): int
+    public function align_x_perc(int $default = 50, ?string $reader_c = null): int
     {
         return $this->get(self::ALIGN_X, $default, $reader_c);
     }
 
-    public function align_y_n(int $default = 50, ?string $reader_c = null): int
+    public function align_y_perc(int $default = 50, ?string $reader_c = null): int
     {
         return $this->get(self::ALIGN_Y, $default, $reader_c);
+    }
+
+    /** @deprecated since 0.7.0 — align_x_perc() says the same: a percentage, not a count. Removed in 0.8.0. */
+    public function align_x_n(int $default = 50, ?string $reader_c = null): int
+    {
+        return $this->align_x_perc($default, $reader_c);
+    }
+
+    /** @deprecated since 0.7.0 — align_y_perc() says the same: a percentage, not a count. Removed in 0.8.0. */
+    public function align_y_n(int $default = 50, ?string $reader_c = null): int
+    {
+        return $this->align_y_perc($default, $reader_c);
     }
 
     public function crop_left(?string $reader_c = null): int|string|null
@@ -311,6 +430,76 @@ final class ConversionOptions
     public function crop_bottom(?string $reader_c = null): int|string|null
     {
         return $this->get(self::CROP_BOTTOM, null, $reader_c);
+    }
+
+    public function grid_columns(?string $reader_c = null): int|string|null
+    {
+        return $this->get(self::GRID_COLUMNS, null, $reader_c);
+    }
+
+    public function grid_rows(?string $reader_c = null): int|string|null
+    {
+        return $this->get(self::GRID_ROWS, null, $reader_c);
+    }
+
+    public function grid_gutter_x(?string $reader_c = null): int|string|null
+    {
+        return $this->get(self::GRID_GUTTER_X, null, $reader_c);
+    }
+
+    public function grid_gutter_y(?string $reader_c = null): int|string|null
+    {
+        return $this->get(self::GRID_GUTTER_Y, null, $reader_c);
+    }
+
+    public function grid_margin_left(?string $reader_c = null): int|string|null
+    {
+        return $this->get(self::GRID_MARGIN_LEFT, null, $reader_c);
+    }
+
+    public function grid_margin_right(?string $reader_c = null): int|string|null
+    {
+        return $this->get(self::GRID_MARGIN_RIGHT, null, $reader_c);
+    }
+
+    public function grid_margin_top(?string $reader_c = null): int|string|null
+    {
+        return $this->get(self::GRID_MARGIN_TOP, null, $reader_c);
+    }
+
+    public function grid_margin_bottom(?string $reader_c = null): int|string|null
+    {
+        return $this->get(self::GRID_MARGIN_BOTTOM, null, $reader_c);
+    }
+
+    public function grid_order_code(string $default = 'lr-tb', ?string $reader_c = null): string
+    {
+        return $this->get(self::GRID_ORDER, $default, $reader_c);
+    }
+
+    public function grid_expect_n(?string $reader_c = null): ?int
+    {
+        return $this->get(self::GRID_EXPECT, null, $reader_c);
+    }
+
+    public function grid_skip_empty(bool $default = false, ?string $reader_c = null): bool
+    {
+        return $this->get(self::GRID_SKIP_EMPTY, $default, $reader_c);
+    }
+
+    public function background_code(?string $reader_c = null): ?string
+    {
+        return $this->get(self::BACKGROUND, null, $reader_c);
+    }
+
+    public function gap_min(?string $reader_c = null): int|string|null
+    {
+        return $this->get(self::GAP_MIN, null, $reader_c);
+    }
+
+    public function gap_tolerance_perc(int $default = 10, ?string $reader_c = null): int
+    {
+        return $this->get(self::GAP_TOLERANCE, $default, $reader_c);
     }
 
     /** @return array<string, mixed> the unscoped bag only — scoped values are, by design, not visible without naming a reader */

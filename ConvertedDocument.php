@@ -22,13 +22,22 @@ namespace Italix\Converters;
  * underlying tool allows it. A driver that must shell out to something
  * file-only (most LibreOffice invocations) is free to write and read temp
  * files internally; that is the driver's business, not this contract's.
+ *
+ * A piece an Extractor returns also says where it came from — its locator,
+ * in the driver's own shape (a grid cell's row, column and pixel box; a PDF
+ * page range; later, an audio segment's start and end). Without it a piece
+ * cut where a driver *detected* a boundary could not be placed back, and a
+ * skipped empty cell would silently shift every piece after it. Null for
+ * everything that is not a piece of something.
  */
 final class ConvertedDocument
 {
+    /** @param array<string, int>|null $locator */
     public function __construct(
         private readonly string $bytes,
         private readonly string $extension_c,
         private readonly string $mime_c,
+        private readonly ?array $locator = null,
     ) {
     }
 
@@ -47,5 +56,11 @@ final class ConvertedDocument
     public function mime(): string
     {
         return $this->mime_c;
+    }
+
+    /** @return array<string, int>|null where this piece came from, in its driver's own shape; null when it is not a piece */
+    public function locator(): ?array
+    {
+        return $this->locator;
     }
 }

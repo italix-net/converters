@@ -3,6 +3,75 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versioning policy: `VERSIONING.md` at the
 project root.
 
+## [0.7.0] — 2026-09-26
+
+### Changed
+
+Postfixes that say what a value is: `_n` only for a count, `_i` for an index, `_perc` for a
+percentage from 0 to 100, none for a level.
+
+- **`quality()`** reads `QUALITY`, **`page_i()`** reads `PAGE` (1-based: an index). `quality_n()`
+  and `page_n()`, published in 0.3.0, stay as **deprecated aliases** returning the same, to be
+  removed in 0.8.0.
+- **`align_x_perc()`, `align_y_perc()`** read `ALIGN_X`/`ALIGN_Y`. `align_x_n()`/`align_y_n()`,
+  published in 0.5.0, stay as **deprecated aliases** too, removed in 0.8.0.
+- **`gap_tolerance_perc()`** reads `GAP_TOLERANCE` — renamed outright: `gap_tolerance_n()` (0.6.0)
+  was never published.
+- The setters' parameters follow (`with_quality(int $quality)`, `with_page(int $page_i)`,
+  `with_align_x(int $align_perc)`, `with_gap_tolerance(int $tolerance_perc)`): a caller passing them
+  **by name** (`with_quality(quality_n: 80)`) has to rename the argument — the one change here no
+  alias can cover. Positional calls are unaffected.
+
+`tests/ConversionOptionsTest.php` (16) reads every renamed value by its new name and through both
+aliases; the suites written against 0.3.0's names pass unchanged, through the aliases.
+
+The seven suites run on the shared runner (`Italix\Testing`), so `ix test` sees them: `italix/testing` `^2.0` is
+a dev dependency. Their checks are unchanged — the same 183.
+
+
+
+### Added
+
+**Grids, slices and gaps** — the geometry a composite is taken apart and put together with, shared by
+every driver that does either.
+All three stateless, never instantiated, no pixels — like `CropGeometry`.
+
+- **`AxisLayout`** — tracks along one axis: `margin + track + gutter + … + margin = size`. `resolve()`
+  from a size to the tracks, `fit()` from what goes in each track to the size. A spec is a count
+  (`3`, or `'3'`) or a list of pixels and shares (`'200px 1fr 2fr'`). **Pixels carry their unit**:
+  the first merger test found `'100'` read two ways (a hundred tracks, or one of 100px), so a bare
+  number is always a count. No percentages in a list — `'1fr 3fr'` says `'25% 75%'` and adds up by
+  construction. Leftover pixels go one each to the first shares (1024 in three: 342, 341, 341), in
+  both directions. Without an `fr`, the pixel tracks must add up exactly, or it throws. `fit()` fits
+  what it is given — a shared track is as large as its content, not stretched to its weight — and an
+  empty shared track (a declared grid not full) is as large as the largest one, so empty cells are
+  background, not a collapsed line. Counts above `MAX_TRACKS_N` (10000) and axes that would overflow
+  an integer are refused before anything is allocated.
+- **`GridGeometry`** — two `AxisLayout`s and a reading order (`lr-tb`, `rl-tb`, `tb-lr`, `tb-rl`).
+  `cells()` takes a sheet apart, `canvas()` puts one together (percentages refused there: a share of
+  the size being worked out is circular), `sort()` orders any set of labelled cells, a detected
+  irregular one too. `'auto'` is refused: detection needs pixels, a driver's job.
+- **`Spans`** — where the content is along one axis, from a profile: `content()` for the outer margin,
+  `split()` for the gutters at least `min_gap` long. An image's margins, a recording's silences and a
+  video's black frames are the same problem.
+
+`ConversionOptions` — fourteen keys, each with its typed `with_*()` and reader: `GRID_COLUMNS`,
+`GRID_ROWS`, `GRID_GUTTER_X/Y`, `GRID_MARGIN_LEFT/RIGHT/TOP/BOTTOM`, `GRID_ORDER`, `GRID_EXPECT`,
+`GRID_SKIP_EMPTY`, `BACKGROUND`, `GAP_MIN`, `GAP_TOLERANCE`. They describe the sheet, not the
+operation: the options that take a sheet apart put it back together.
+
+`ConvertedDocument` — an optional fourth constructor argument and `locator()`: where a piece came
+from, in its driver's own shape. Every existing `new ConvertedDocument(…)` is unchanged.
+
+### Verification
+
+`tests/AxisLayoutTest.php` (39), `tests/GridGeometryTest.php` (32), `tests/SpansTest.php` (12) —
+worked examples computed by hand before the code, as `CropGeometryTest` was. An adversarial review
+fuzzed the geometry (20,000 random `cells()` → `canvas()` round trips: in bounds, no overlap, the same
+sheet back; 20,000 random `split()` profiles) and mutation-tested it (84 mutants); what it found — the
+overflows, the empty tracks, the whitespace — is fixed and pinned by a test that fails without the
+fix. PHPStan level 6 clean on the new sources.
+
 ## [0.5.0] — 2026-09-03
 
 ### Added
