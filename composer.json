@@ -1,6 +1,6 @@
 {
     "name": "italix/converters",
-    "description": "A pairwise format-conversion contract and a shortest-route driver registry — the plumbing italix/documents and a future italix/media share, neither owns.",
+    "description": "A pairwise format-conversion contract and a shortest-route driver registry, plus the crop, grid and gap geometry every driver shares — the plumbing of italix/documents and italix/media",
     "type": "library",
     "license": "MPL-2.0",
     "version": "0.7.0",
